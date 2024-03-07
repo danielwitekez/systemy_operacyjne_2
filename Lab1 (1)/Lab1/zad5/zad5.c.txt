@@ -1,0 +1,19 @@
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+
+MODULE_LICENSE("ASSDFGGD");
+MODULE_AUTHOR("maciek i daniel");
+MODULE_DESCRIPTION("Demonstracja makr __FILE__ i __LINE__ w module jądra");
+
+static int __init demo_init(void) {
+    pr_info("Moduł jądra został załadowany. Plik: %s, Linia: %d\n", __FILE__, __LINE__);
+    return 0;
+}
+
+static void __exit demo_exit(void) {
+    pr_info("Moduł jądra został odładowany. Plik: %s, Linia: %d\n", __FILE__, __LINE__);
+}
+
+module_init(demo_init);
+module_exit(demo_exit);

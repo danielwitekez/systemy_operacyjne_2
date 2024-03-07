@@ -1,0 +1,31 @@
+#include <stdio.h>
+
+#ifdef __KERNEL__
+    #include <linux/module.h>
+    #include <linux/kernel.h>
+
+    void checkSpace() {
+        printk(KERN_INFO "Funkcja została wywołana w module jądra.\n");
+    }
+
+    int init_module(void) {
+        checkSpace();
+        return 0;
+    }
+
+    void cleanup_module(void) {
+        printk(KERN_INFO "Moduł jądra został odładowany.\n");
+    }
+
+#else
+
+    void checkSpace() {
+        printf("Funkcja została wywołana w programie użytkownika.\n");
+    }
+
+    int main() {
+        checkSpace();
+        return 0;
+    }
+
+#endif

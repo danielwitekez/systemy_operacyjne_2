@@ -1,0 +1,5 @@
+#user
+gcc -o user_program multi_mode.c
+./user_program
+#jadro
+make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
