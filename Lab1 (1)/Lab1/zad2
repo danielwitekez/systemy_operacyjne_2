@@ -1,0 +1,32 @@
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/string.h>
+
+void demonstrate_string_functions(void) {
+    char dest[20];
+    const char *src = "Hello, ";
+    const char *append = "world!";
+    int cmp_result;
+
+    // strscpy demonstration
+    strscpy(dest, src, sizeof(dest));
+    pr_info("strscpy result: %s\n", dest);
+
+    // strlcat demonstration
+    strlcat(dest, append, sizeof(dest));
+    pr_info("strlcat result: %s\n", dest);
+
+    // strncmp demonstration
+    cmp_result = strncmp(dest, "Hello, world!", sizeof(dest));
+    pr_info("strncmp result: %d\n", cmp_result);
+}
+
+int init_module(void) {
+    pr_info("Initializing string functions module\n");
+    demonstrate_string_functions();
+    return 0;
+}
+
+void cleanup_module(void) {
+    pr_info("Cleaning up string functions module\n");
+}
