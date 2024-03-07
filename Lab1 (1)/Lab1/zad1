@@ -1,15 +1,15 @@
 #include <linux/types.h>
-#include <stdio.h>
+#include <linux/kernel.h>
 
 int main() {
-    printf("sizeof(s8): %lu\n", sizeof(s8));
-    printf("sizeof(u8): %lu\n", sizeof(u8));
-    printf("sizeof(s16): %lu\n", sizeof(s16));
-    printf("sizeof(u16): %lu\n", sizeof(u16));
-    printf("sizeof(s32): %lu\n", sizeof(s32));
-    printf("sizeof(u32): %lu\n", sizeof(u32));
-    printf("sizeof(s64): %lu\n", sizeof(s64));
-    printf("sizeof(u64): %lu\n", sizeof(u64));
+    printk(KERN_INFO "sizeof(s8): %lu\n", sizeof(s8));
+    printk(KERN_INFO "sizeof(u8): %lu\n", sizeof(u8));
+    printk(KERN_INFO "sizeof(s16): %lu\n", sizeof(s16));
+    printk(KERN_INFO "sizeof(u16): %lu\n", sizeof(u16));
+    printk(KERN_INFO "sizeof(s32): %lu\n", sizeof(s32));
+    printk(KERN_INFO "sizeof(u32): %lu\n", sizeof(u32));
+    printk(KERN_INFO "sizeof(s64): %lu\n", sizeof(s64));
+    printk(KERN_INFO "sizeof(u64): %lu\n", sizeof(u64));
 
     return 0;
 }
