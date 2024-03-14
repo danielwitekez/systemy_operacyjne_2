@@ -1,0 +1,59 @@
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/slab.h> // Potrzebne dla kmalloc i kfree
+
+MODULE_LICENSE("GPL");
+
+// Struktura elementu listy
+typedef struct ListNode {
+    int data;
+    struct ListNode *next;
+} ListNode;
+
+// Funkcja tworząca nowy element listy
+ListNode *createNode(int value) {
+    ListNode *newNode = kmalloc(sizeof(ListNode), GFP_KERNEL);
+    if (!newNode) {
+        printk(KERN_ERR "Failed to allocate memory for new node\n");
+        return NULL;
+    }
+    newNode->data = value;
+    newNode->next = NULL;
+    return newNode;
+}
+
+// Funkcja dodająca element na koniec listy
+void append(ListNode **head, int value) {
+    ListNode *newNode = createNode(value);
+    if (*head == NULL) {
+        *head = newNode;
+        (*head)->next = *head; // ustawienie wskaźnika next na siebie samego, tworząc cykl
+    } else {
+        ListNode *temp = *head;
+        while (temp->next != *head) {
+            temp = temp->next;
+        }
+        temp->next = newNode;
+        newNode->next = *head;
+    }
+}
+
+// Moduł init
+static int __init list_init(void) {
+    ListNode *myList = NULL;
+    
+    append(&myList, 10);
+    append(&myList, 20);
+    append(&myList, 30);
+    
+    return 0;
+}
+
+// Moduł exit
+static void __exit list_exit(void) {
+    printk(KERN_INFO "Exiting list module\n");
+}
+
+module_init(list_init);
+module_exit(list_exit);
