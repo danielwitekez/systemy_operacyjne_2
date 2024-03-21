@@ -1,0 +1,146 @@
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/slab.h> // Potrzebne dla kmalloc i kfree
+#include <linux/string.h> // Potrzebne dla funkcji strnlen_user
+
+MODULE_LICENSE("GPL");
+
+// Struktura węzła drzewa pozycyjnego
+typedef struct PositionalTreeNode {
+    char *data;
+    struct PositionalTreeNode *left;
+    struct PositionalTreeNode *right;
+} PositionalTreeNode;
+
+// Funkcja tworząca nowy węzeł drzewa pozycyjnego
+PositionalTreeNode *createNode(const char *value) {
+    PositionalTreeNode *newNode = kmalloc(sizeof(PositionalTreeNode), GFP_KERNEL);
+    if (!newNode) {
+        printk(KERN_ERR "Failed to allocate memory for new node\n");
+        return NULL;
+    }
+    newNode->data = kmalloc(strnlen_user(value, 255) + 1, GFP_KERNEL);
+    if (!newNode->data) {
+        kfree(newNode);
+        printk(KERN_ERR "Failed to allocate memory for new node data\n");
+        return NULL;
+    }
+    strncpy(newNode->data, value, strnlen_user(value, 255) + 1);
+    newNode->left = NULL;
+    newNode->right = NULL;
+    return newNode;
+}
+
+// Funkcja dodająca węzeł do drzewa pozycyjnego
+void insertPositionalTree(PositionalTreeNode **root, PositionalTreeNode *newNode) {
+    if (*root == NULL) {
+        *root = newNode;
+        return;
+    }
+    int cmp = strcmp(newNode->data, (*root)->data);
+    if (cmp < 0)
+        insertPositionalTree(&(*root)->left, newNode);
+    else
+        insertPositionalTree(&(*root)->right, newNode);
+}
+
+// Funkcja usuwająca węzeł z drzewa pozycyjnego
+PositionalTreeNode *deletePositionalTree(PositionalTreeNode *root, const char *value) {
+    if (root == NULL)
+        return root;
+    
+    int cmp = strcmp(value, root->data);
+    if (cmp < 0)
+        root->left = deletePositionalTree(root->left, value);
+    else if (cmp > 0)
+        root->right = deletePositionalTree(root->right, value);
+    else {
+        if (root->left == NULL) {
+            PositionalTreeNode *temp = root->right;
+            kfree(root->data);
+            kfree(root);
+            return temp;
+        } else if (root->right == NULL) {
+            PositionalTreeNode *temp = root->left;
+            kfree(root->data);
+            kfree(root);
+            return temp;
+        }
+        
+        PositionalTreeNode *temp = root->right;
+        while (temp->left != NULL)
+            temp = temp->left;
+        
+        kfree(root->data);
+        root->data = kmalloc(strlen(temp->data) + 1, GFP_KERNEL);
+        strncpy(root->data, temp->data, strlen(temp->data) + 1);
+        root->right = deletePositionalTree(root->right, temp->data);
+    }
+    return root;
+}
+
+// Funkcja usuwająca drzewo pozycyjne
+void destroyPositionalTree(PositionalTreeNode *root) {
+    if (root == NULL)
+        return;
+    destroyPositionalTree(root->left);
+    destroyPositionalTree(root->right);
+    kfree(root->data);
+    kfree(root);
+}
+
+// Moduł init
+static int __init positional_tree_init(void) {
+    PositionalTreeNode *myTree = NULL;
+    
+    PositionalTreeNode *node1 = createNode("Hello");
+    insertPositionalTree(&myTree, node1);
+    
+    PositionalTreeNode *node2 = createNode("world");
+    insertPositionalTree(&myTree, node2);
+    
+    PositionalTreeNode *node3 = createNode("from");
+    insertPositionalTree(&myTree, node3);
+    
+    PositionalTreeNode *node4 = createNode("kernel");
+    insertPositionalTree(&myTree, node4);
+    
+    PositionalTreeNode *node5 = createNode("module");
+    insertPositionalTree(&myTree, node5);
+    
+    // Displaying the elements of the tree
+    printk(KERN_INFO "Inserted elements:\n");
+    printk(KERN_INFO "-------------------\n");
+    printk(KERN_INFO "Root: %s\n", myTree->data);
+    printk(KERN_INFO "Left child of root: %s\n", myTree->left->data);
+    printk(KERN_INFO "Right child of root: %s\n", myTree->right->data);
+    printk(KERN_INFO "Left child of right child: %s\n", myTree->right->left->data);
+    printk(KERN_INFO "Right child of right child: %s\n", myTree->right->right->data);
+    printk(KERN_INFO "-------------------\n");
+    
+    // Deleting a node from the tree
+    myTree = deletePositionalTree(myTree, "world");
+    
+    // Displaying the elements of the tree after deletion
+    printk(KERN_INFO "Tree elements after deletion of 'world':\n");
+    printk(KERN_INFO "-------------------\n");
+    printk(KERN_INFO "Root: %s\n", myTree->data);
+    printk(KERN_INFO "Left child of root: %s\n", myTree->left->data);
+    printk(KERN_INFO "Right child of root: %s\n", myTree->right->data);
+    printk(KERN_INFO "Right child of right child: %s\n", myTree->right->right->data);
+    printk(KERN_INFO "-------------------\n");
+    
+    // Destroying the positional tree
+    destroyPositionalTree(myTree);
+    
+    return 0;
+}
+
+// Moduł exit
+static void __exit positional_tree_exit(void) {
+    printk(KERN_INFO "Exiting positional tree module\n");
+}
+
+module_init(positional_tree_init);
+module_exit(positional_tree_exit);

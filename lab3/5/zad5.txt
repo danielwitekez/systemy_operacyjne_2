@@ -1,0 +1,131 @@
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/slab.h> // Potrzebne dla kmalloc i kfree
+#include <linux/rbtree.h> // Potrzebne dla drzewa czerwono-czarnego
+#include <linux/string.h> // Potrzebne dla funkcji strnlen_user
+
+MODULE_LICENSE("GPL");
+
+// Struktura węzła drzewa czerwono-czarnego
+struct rb_node {
+    unsigned long rb_parent_color;
+    struct rb_node *rb_right;
+    struct rb_node *rb_left;
+} __attribute__((aligned(sizeof(long))));
+
+// Struktura drzewa czerwono-czarnego
+struct rb_root {
+    struct rb_node *rb_node;
+};
+
+// Struktura elementu przechowywanego w drzewie
+typedef struct {
+    struct rb_node node;
+    char *data;
+} MyNode;
+
+// Funkcja inicjalizująca drzewo czerwono-czarne
+void initializeRBTree(struct rb_root *root) {
+    root->rb_node = NULL;
+}
+
+// Funkcja dodająca element do drzewa czerwono-czarnego
+void insertRBTree(struct rb_root *root, MyNode *newNode) {
+    struct rb_node **new = &(root->rb_node), *parent = NULL;
+    
+    while (*new) {
+        MyNode *this = container_of(*new, MyNode, node);
+        int result = strcmp(newNode->data, this->data);
+        
+        parent = *new;
+        if (result < 0)
+            new = &((*new)->rb_left);
+        else if (result > 0)
+            new = &((*new)->rb_right);
+        else
+            return;
+    }
+    
+    rb_link_node(&newNode->node, parent, new);
+    rb_insert_color(&newNode->node, root);
+}
+
+// Funkcja usuwająca element z drzewa czerwono-czarnego
+void deleteRBTree(struct rb_root *root, const char *value) {
+    struct rb_node *node = root->rb_node;
+    
+    while (node) {
+        MyNode *this = container_of(node, MyNode, node);
+        int result = strcmp(value, this->data);
+        
+        if (result < 0)
+            node = node->rb_left;
+        else if (result > 0)
+            node = node->rb_right;
+        else {
+            rb_erase(&this->node, root);
+            kfree(this->data);
+            kfree(this);
+            return;
+        }
+    }
+}
+
+// Funkcja usuwająca drzewo czerwono-czarne
+void destroyRBTree(struct rb_root *root) {
+    while (root->rb_node) {
+        MyNode *this = container_of(root->rb_node, MyNode, node);
+        rb_erase(&this->node, root);
+        kfree(this->data);
+        kfree(this);
+    }
+}
+
+// Moduł init
+static int __init rbtree_init(void) {
+    struct rb_root myTree = RB_ROOT;
+    
+    MyNode *node1 = kmalloc(sizeof(MyNode), GFP_KERNEL);
+    node1->data = kmalloc(strlen("Hello") + 1, GFP_KERNEL);
+    strcpy(node1->data, "Hello");
+    insertRBTree(&myTree, node1);
+    
+    MyNode *node2 = kmalloc(sizeof(MyNode), GFP_KERNEL);
+    node2->data = kmalloc(strlen("world") + 1, GFP_KERNEL);
+    strcpy(node2->data, "world");
+    insertRBTree(&myTree, node2);
+    
+    MyNode *node3 = kmalloc(sizeof(MyNode), GFP_KERNEL);
+    node3->data = kmalloc(strlen("from") + 1, GFP_KERNEL);
+    strcpy(node3->data, "from");
+    insertRBTree(&myTree, node3);
+    
+    MyNode *node4 = kmalloc(sizeof(MyNode), GFP_KERNEL);
+    node4->data = kmalloc(strlen("kernel") + 1, GFP_KERNEL);
+    strcpy(node4->data, "kernel");
+    insertRBTree(&myTree, node4);
+    
+    MyNode *node5 = kmalloc(sizeof(MyNode), GFP_KERNEL);
+    node5->data = kmalloc(strlen("module") + 1, GFP_KERNEL);
+    strcpy(node5->data, "module");
+    insertRBTree(&myTree, node5);
+    
+    struct rb_node *rbnode;
+    for (rbnode = rb_first(&myTree); rbnode; rbnode = rb_next(rbnode)) {
+        MyNode *this = container_of(rbnode, MyNode, node);
+        printk(KERN_INFO "Inserted: %s\n", this->data);
+    }
+    
+    destroyRBTree(&myTree);
+    
+    return 0;
+}
+
+// Moduł exit
+static void __exit rbtree_exit(void) {
+    printk(KERN_INFO "Exiting rbtree module\n");
+}
+
+module_init(rbtree_init);
+module_exit(rbtree_exit);

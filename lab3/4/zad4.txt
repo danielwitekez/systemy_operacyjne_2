@@ -1,0 +1,109 @@
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/slab.h> // Potrzebne dla kmalloc i kfree
+#include <linux/string.h> // Potrzebne dla funkcji strnlen_user
+
+MODULE_LICENSE("GPL");
+
+// Struktura elementu kolejki
+typedef struct QueueNode {
+    char *data;
+    struct QueueNode *next;
+} QueueNode;
+
+// Struktura kolejki FIFO
+typedef struct {
+    QueueNode *front; // wskaźnik na początek kolejki
+    QueueNode *rear;  // wskaźnik na koniec kolejki
+} Queue;
+
+// Funkcja inicjalizująca kolejkę
+void initializeQueue(Queue *queue) {
+    queue->front = NULL;
+    queue->rear = NULL;
+}
+
+// Funkcja dodająca element do kolejki
+void enqueue(Queue *queue, const char *value) {
+    char *newValue = kmalloc(strnlen_user(value, 255) + 1, GFP_KERNEL);
+    if (!newValue) {
+        printk(KERN_ERR "Failed to allocate memory for new string\n");
+        return;
+    }
+    strncpy(newValue, value, strnlen_user(value, 255));
+    
+    QueueNode *newNode = kmalloc(sizeof(QueueNode), GFP_KERNEL);
+    if (!newNode) {
+        kfree(newValue);
+        printk(KERN_ERR "Failed to allocate memory for new node\n");
+        return;
+    }
+    newNode->data = newValue;
+    newNode->next = NULL;
+    
+    if (queue->rear == NULL) {
+        queue->front = newNode;
+        queue->rear = newNode;
+    } else {
+        queue->rear->next = newNode;
+        queue->rear = newNode;
+    }
+}
+
+// Funkcja usuwająca element z kolejki
+char *dequeue(Queue *queue) {
+    if (queue->front == NULL) {
+        printk(KERN_INFO "Queue is empty\n");
+        return NULL;
+    }
+    
+    char *value = queue->front->data;
+    QueueNode *temp = queue->front;
+    
+    if (queue->front == queue->rear) {
+        queue->front = NULL;
+        queue->rear = NULL;
+    } else {
+        queue->front = queue->front->next;
+    }
+    
+    kfree(temp);
+    return value;
+}
+
+// Funkcja usuwająca kolejkę
+void destroyQueue(Queue *queue) {
+    while (queue->front != NULL) {
+        char *value = dequeue(queue);
+        kfree(value);
+    }
+}
+
+// Moduł init
+static int __init queue_init(void) {
+    Queue myQueue;
+    initializeQueue(&myQueue);
+    
+    enqueue(&myQueue, "Hello");
+    enqueue(&myQueue, "world");
+    enqueue(&myQueue, "from");
+    enqueue(&myQueue, "kernel");
+    enqueue(&myQueue, "module");
+    
+    char *value;
+    while ((value = dequeue(&myQueue)) != NULL) {
+        printk(KERN_INFO "Dequeued: %s\n", value);
+        kfree(value);
+    }
+    
+    return 0;
+}
+
+// Moduł exit
+static void __exit queue_exit(void) {
+    printk(KERN_INFO "Exiting queue module\n");
+}
+
+module_init(queue_init);
+module_exit(queue_exit);
