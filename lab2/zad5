@@ -1,0 +1,101 @@
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+
+struct queue_node
+{
+    char data[15];
+    struct queue_node *next;
+};
+
+struct queue_pointers
+{
+    struct queue_node *head, *tail;
+} queue;
+
+bool enqueue(struct queue_pointers *queue, char *data)
+{
+    struct queue_node *new_node = (struct queue_node *)kmalloc(sizeof(struct queue_node),GFP_KERNEL);
+
+    if(new_node != NULL)
+    {
+        strcpy(new_node->data,data);
+        new_node->next = NULL;
+
+        if(queue->head == NULL)
+        {
+            queue->head = queue->tail = new_node;
+        }
+        else
+        {
+            queue->tail->next = new_node;
+            queue->tail = new_node;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+bool dequeue(struct queue_pointers *queue)
+{
+    if(queue->head != NULL)
+    {
+        struct queue_node *tmp = queue->head->next;
+        kfree(queue->head);
+        queue->head = tmp;
+
+        if(tmp == NULL)
+        {
+            queue->tail = NULL;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+void print_queue(struct queue_pointers queue)
+{
+    for(; queue.head != NULL; queue.head = queue.head->next)
+    {
+        printk(KERN_INFO"%s ", queue.head->data);
+    }
+}
+
+void delete_queue(struct queue_pointers *queue)
+{
+    while(queue->head != NULL)
+    {
+        dequeue(queue);
+    }
+}
+
+static int __init dll_init(void)
+{
+    printk(KERN_INFO"Start\n");
+	enqueue(&queue, "a");
+    enqueue(&queue, "b");
+    enqueue(&queue, "c");
+    enqueue(&queue, "d");
+    enqueue(&queue, "e");
+
+    return 0;
+}
+
+static void __exit dll_exit(void)
+{
+    print_queue(queue);
+    delete_queue(&queue);
+    printk(KERN_INFO"Po usuniÄciu kolejki:\n");
+    print_queue(queue);
+
+    printk(KERN_INFO"Koniec\n");
+}
+
+module_init(dll_init);
+module_exit(dll_exit);
+
+MODULE_LICENSE("GPL");
