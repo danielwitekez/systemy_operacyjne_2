@@ -2,108 +2,75 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/slab.h> // Potrzebne dla kmalloc i kfree
-#include <linux/string.h> // Potrzebne dla funkcji strnlen_user
+#include <linux/moduleparam.h> // Potrzebne dla obsługi parametrów modułu
+#include <linux/kfifo.h> // Potrzebne dla funkcji kfifo_alloc i kfifo_in
 
 MODULE_LICENSE("GPL");
 
-// Struktura elementu kolejki
-typedef struct QueueNode {
-    char *data;
-    struct QueueNode *next;
-} QueueNode;
+#define MAX_STR_LEN 256
+#define MAX_ELEMENTS 5
 
-// Struktura kolejki FIFO
-typedef struct {
-    QueueNode *front; // wskaźnik na początek kolejki
-    QueueNode *rear;  // wskaźnik na koniec kolejki
-} Queue;
+static char *input_strings[MAX_ELEMENTS]; // Tablica na łańcuchy znaków przekazane jako parametry modułu
+static int num_strings = 0; // Liczba łańcuchów przekazanych jako parametry modułu
 
-// Funkcja inicjalizująca kolejkę
-void initializeQueue(Queue *queue) {
-    queue->front = NULL;
-    queue->rear = NULL;
-}
+module_param_array(input_strings, charp, &num_strings, 0); // Parametr modułu do przekazania łańcuchów znaków
 
-// Funkcja dodająca element do kolejki
-void enqueue(Queue *queue, const char *value) {
-    char *newValue = kmalloc(strnlen_user(value, 255) + 1, GFP_KERNEL);
-    if (!newValue) {
-        printk(KERN_ERR "Failed to allocate memory for new string\n");
-        return;
-    }
-    strncpy(newValue, value, strnlen_user(value, 255));
-    
-    QueueNode *newNode = kmalloc(sizeof(QueueNode), GFP_KERNEL);
-    if (!newNode) {
-        kfree(newValue);
-        printk(KERN_ERR "Failed to allocate memory for new node\n");
-        return;
-    }
-    newNode->data = newValue;
-    newNode->next = NULL;
-    
-    if (queue->rear == NULL) {
-        queue->front = newNode;
-        queue->rear = newNode;
-    } else {
-        queue->rear->next = newNode;
-        queue->rear = newNode;
-    }
-}
+static struct kfifo fifo_queue; // Kolejka FIFO
 
-// Funkcja usuwająca element z kolejki
-char *dequeue(Queue *queue) {
-    if (queue->front == NULL) {
-        printk(KERN_INFO "Queue is empty\n");
-        return NULL;
-    }
-    
-    char *value = queue->front->data;
-    QueueNode *temp = queue->front;
-    
-    if (queue->front == queue->rear) {
-        queue->front = NULL;
-        queue->rear = NULL;
-    } else {
-        queue->front = queue->front->next;
-    }
-    
-    kfree(temp);
-    return value;
-}
+static int __init fifo_init(void)
+{
+    int i, ret;
+    char buffer[MAX_STR_LEN];
 
-// Funkcja usuwająca kolejkę
-void destroyQueue(Queue *queue) {
-    while (queue->front != NULL) {
-        char *value = dequeue(queue);
-        kfree(value);
+    if (num_strings == 0) {
+        pr_alert("No strings provided as module parameters\n");
+        return -EINVAL;
     }
-}
 
-// Moduł init
-static int __init queue_init(void) {
-    Queue myQueue;
-    initializeQueue(&myQueue);
-    
-    enqueue(&myQueue, "Hello");
-    enqueue(&myQueue, "world");
-    enqueue(&myQueue, "from");
-    enqueue(&myQueue, "kernel");
-    enqueue(&myQueue, "module");
-    
-    char *value;
-    while ((value = dequeue(&myQueue)) != NULL) {
-        printk(KERN_INFO "Dequeued: %s\n", value);
-        kfree(value);
+    ret = kfifo_alloc(&fifo_queue, MAX_ELEMENTS * MAX_STR_LEN, GFP_KERNEL);
+    if (ret) {
+        pr_alert("Error allocating kfifo\n");
+        return ret;
     }
-    
+
+    // Dodawanie przekazanych łańcuchów do kolejki FIFO
+    for (i = 0; i < num_strings; ++i) {
+        if (strlen(input_strings[i]) >= MAX_STR_LEN) {
+            pr_warn("String too long: %s\n", input_strings[i]);
+            continue;
+        }
+
+        if (!kfifo_in(&fifo_queue, input_strings[i], strlen(input_strings[i]) + 1)) {
+            pr_warn("Failed to enqueue string: %s\n", input_strings[i]);
+        }
+    }
+
+    // Wyświetlanie zawartości kolejki
+    pr_info("Elements in the FIFO queue:\n");
+    while (kfifo_get(&fifo_queue, buffer, MAX_STR_LEN) > 0) {
+        pr_info("Value: %s\n", buffer);
+    }
+
     return 0;
 }
 
-// Moduł exit
-static void __exit queue_exit(void) {
-    printk(KERN_INFO "Exiting queue module\n");
+static void __exit fifo_exit(void)
+{
+    char buffer[MAX_STR_LEN];
+
+    pr_info("Exiting fifo module\n");
+
+    // Wyświetlanie i usuwanie pozostałych elementów z kolejki
+    while (kfifo_get(&fifo_queue, buffer, MAX_STR_LEN) > 0) {
+        pr_info("Value from the queue: %s\n", buffer);
+    }
+
+    kfifo_free(&fifo_queue);
 }
 
-module_init(queue_init);
-module_exit(queue_exit);
+module_init(fifo_init);
+module_exit(fifo_exit);
+
+MODULE_AUTHOR("Your Name <your_email@domain.com>");
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("An exemplary module demonstrating the usage of a kernel FIFO queue.");
