@@ -1,21 +1,19 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/slab.h> // Potrzebne dla kmalloc i kfree
-#include <linux/moduleparam.h> // Potrzebne dla obsługi parametrów modułu
-#include <linux/kfifo.h> // Potrzebne dla funkcji kfifo_alloc i kfifo_in
-
-MODULE_LICENSE("GPL");
+#include <linux/slab.h> 
+#include <linux/moduleparam.h>
+#include <linux/kfifo.h>
 
 #define MAX_STR_LEN 256
 #define MAX_ELEMENTS 5
 
-static char *input_strings[MAX_ELEMENTS]; // Tablica na łańcuchy znaków przekazane jako parametry modułu
-static int num_strings = 0; // Liczba łańcuchów przekazanych jako parametry modułu
+static char *input_strings[MAX_ELEMENTS];
+static int num_strings = 0;
 
-module_param_array(input_strings, charp, &num_strings, 0); // Parametr modułu do przekazania łańcuchów znaków
+module_param_array(input_strings, charp, &num_strings, 0);
 
-static struct kfifo fifo_queue; // Kolejka FIFO
+static struct kfifo fifo_queue; 
 
 static int __init fifo_init(void)
 {
@@ -33,7 +31,6 @@ static int __init fifo_init(void)
         return ret;
     }
 
-    // Dodawanie przekazanych łańcuchów do kolejki FIFO
     for (i = 0; i < num_strings; ++i) {
         if (strlen(input_strings[i]) >= MAX_STR_LEN) {
             pr_warn("String too long: %s\n", input_strings[i]);
@@ -45,7 +42,6 @@ static int __init fifo_init(void)
         }
     }
 
-    // Wyświetlanie zawartości kolejki
     pr_info("Elements in the FIFO queue:\n");
     while (kfifo_get(&fifo_queue, buffer, MAX_STR_LEN) > 0) {
         pr_info("Value: %s\n", buffer);
@@ -60,7 +56,6 @@ static void __exit fifo_exit(void)
 
     pr_info("Exiting fifo module\n");
 
-    // Wyświetlanie i usuwanie pozostałych elementów z kolejki
     while (kfifo_get(&fifo_queue, buffer, MAX_STR_LEN) > 0) {
         pr_info("Value from the queue: %s\n", buffer);
     }
