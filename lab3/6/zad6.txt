@@ -3,37 +3,45 @@
 #include<linux/radix-tree.h>
 
 #define UPPER_LIMIT 65535
+
+static RADIX_TREE(root,GFP_KERNEL);
 static char* arguments[10];
 static int argumentsCounter = 0;
 int i;
 
-static RADIX_TREE(root,GFP_KERNEL);
+module_param_array(arguments, charp, &argumentsCounter, 0000);
 
-static int __init radixtreemod_init(void){
-  printk(KERN_INFO "Start");
-  for(i=1; i<argumentsCounter; i<<=3) {
-      if(radix_tree_insert(&root,i,(void *)arguments[i]))
-          printk(KERN_INFO "ERR");
-  }
-  return 0;
-  }
-static int __exit radixtreemod_exit(void){
-  char *buff = NULL;
+static int __init start(void) {
+    printk(KERN_INFO "-----------\n");
 
-    for(i=1; i<argumentsCounter; i<<=3) {
-        buff = (char *)radix_tree_delete(&root,i);
-        if(buff) {
-            printk(KERN_INFO "leci element: %s\n", buff);
-            kfree(buff);
+    for(i=0; i<argumentsCounter; i++) {
+        if(radix_tree_insert(&root,i,(void *)arguments[i]) == 0) {
+            printk(KERN_INFO "++ %s\n", arguments[i]);
+		}
+        else {
+            printk(KERN_INFO "ERR init\n");
+		}
+    }
+    return 0;
+}
+
+static void __exit end(void) {
+	char *temp = NULL;
+
+    for(i=0; i<argumentsCounter; i++) {
+        temp = (char *)radix_tree_delete(&root,i);
+        if(temp) {
+            printk(KERN_INFO "leci: %s\n", temp);
+            kfree(temp);
         } else {
-            printk(KERN_INFO "ERR");
+            printk(KERN_INFO "ERR\n");
 		}
     }
 
-    printk(KERN_INFO "--------");
-    return 0;
+    printk(KERN_INFO "----------\n");
 }
-module_init(radixtreemod_init);
-module_exit(radixtreemod_exit);
+
+module_init(start);
+module_exit(end);
 
 MODULE_LICENSE("GPL");
