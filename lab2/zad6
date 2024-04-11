@@ -39,6 +39,36 @@ void append(ListNode **head, int value) {
     }
 }
 
+// Funkcja usuwająca listę
+void destroyList(ListNode **head) {
+    if (*head == NULL) {
+        return;
+    }
+    ListNode *current = *head;
+    ListNode *temp;
+    do {
+        temp = current->next;
+        kfree(current);
+        current = temp;
+    } while (current != *head);
+    *head = NULL;
+}
+
+// Funkcja wyświetlająca zawartość listy
+void displayList(ListNode *head) {
+    if (head == NULL) {
+        printk(KERN_INFO "List is empty\n");
+        return;
+    }
+    ListNode *current = head;
+    printk(KERN_INFO "List: ");
+    do {
+        printk(KERN_CONT "%d ", current->data);
+        current = current->next;
+    } while (current != head);
+    printk(KERN_CONT "\n");
+}
+
 // Moduł init
 static int __init list_init(void) {
     ListNode *myList = NULL;
@@ -47,11 +77,15 @@ static int __init list_init(void) {
     append(&myList, 20);
     append(&myList, 30);
     
+    displayList(myList);
+    
     return 0;
 }
 
 // Moduł exit
 static void __exit list_exit(void) {
+    ListNode *myList = NULL;
+    destroyList(&myList);
     printk(KERN_INFO "Exiting list module\n");
 }
 
