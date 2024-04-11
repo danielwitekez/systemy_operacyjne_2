@@ -1,71 +1,40 @@
 #include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/init.h>
-#include <linux/slab.h> 
-#include <linux/moduleparam.h>
 #include <linux/kfifo.h>
 
-#define MAX_STR_LEN 256
-#define MAX_ELEMENTS 5
+static struct kfifo fifo_queue;
+static char* arguments[10]={}; 
+static int argumentsCounter = 0;
+int counter = 0;
 
-static char *input_strings[MAX_ELEMENTS];
-static int num_strings = 0;
+module_param_array(arguments, charp, &argumentsCounter, 0000);
 
-module_param_array(input_strings, charp, &num_strings, 0);
+static int __init fifo_init(void) {
+	printk(KERN_INFO "Start\n");
 
-static struct kfifo fifo_queue; 
+	kfifo_alloc(&fifo_queue, argumentsCounter * sizeof(char*), GFP_KERNEL);
 
-static int __init fifo_init(void)
-{
-    int i, ret;
-    char buffer[MAX_STR_LEN];
+	while (!kfifo_is_full(&fifo_queue)) {
+		kfifo_in(&fifo_queue, &arguments[counter], sizeof(char*));
+		
+		printk(KERN_INFO"Dodano do kolejki element: %s", arguments[counter]);
+		counter++;
+	}
 
-    if (num_strings == 0) {
-        pr_alert("No strings provided as module parameters\n");
-        return -EINVAL;
-    }
-
-    ret = kfifo_alloc(&fifo_queue, MAX_ELEMENTS * MAX_STR_LEN, GFP_KERNEL);
-    if (ret) {
-        pr_alert("Error allocating kfifo\n");
-        return ret;
-    }
-
-    for (i = 0; i < num_strings; ++i) {
-        if (strlen(input_strings[i]) >= MAX_STR_LEN) {
-            pr_warn("String too long: %s\n", input_strings[i]);
-            continue;
-        }
-
-        if (!kfifo_in(&fifo_queue, input_strings[i], strlen(input_strings[i]) + 1)) {
-            pr_warn("Failed to enqueue string: %s\n", input_strings[i]);
-        }
-    }
-
-    pr_info("Elements in the FIFO queue:\n");
-    while (kfifo_get(&fifo_queue, buffer, MAX_STR_LEN) > 0) {
-        pr_info("Value: %s\n", buffer);
-    }
-
-    return 0;
+	return 0;
 }
 
-static void __exit fifo_exit(void)
-{
-    char buffer[MAX_STR_LEN];
-
-    pr_info("Exiting fifo module\n");
-
-    while (kfifo_get(&fifo_queue, buffer, MAX_STR_LEN) > 0) {
-        pr_info("Value from the queue: %s\n", buffer);
-    }
-
-    kfifo_free(&fifo_queue);
+static void __exit fifo_exit(void) {
+	char* temp;
+	while (!kfifo_is_empty(&fifo_queue)) {
+		kfifo_out(&fifo_queue, &temp, sizeof(char*));
+		printk(KERN_INFO"Usunieto z kolejki element: %s", temp);
+	}
+	
+	kfifo_free(&fifo_queue);
+	printk(KERN_INFO "Koniec\n");
 }
 
 module_init(fifo_init);
 module_exit(fifo_exit);
 
-MODULE_AUTHOR("Your Name <your_email@domain.com>");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("An exemplary module demonstrating the usage of a kernel FIFO queue.");
