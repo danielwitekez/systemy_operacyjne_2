@@ -1,0 +1,59 @@
+#includelinuxmodule.h
+#includelinuxuaccess.h
+#includelinuxproc_fs.h
+
+static struct proc_dir_entry directory_entry_pointer, file_entry_pointer;
+static char directory_name = procfs_test, file_name = procfs_file;
+static char file_buffer[PAGE_SIZE];
+
+static ssize_t procfsmod_show(struct file file, char __user buffer, size_t count, loff_t offset)
+{
+    return simple_read_from_buffer(buffer, count, offset, file_buffer, strlen(file_buffer));
+}
+
+static ssize_t procfsmod_write(struct file file, const char __user buffer, size_t count, loff_t offset)
+{
+    ssize_t ret;
+    ret = simple_write_to_buffer(file_buffer, sizeof(file_buffer), offset, buffer, count);
+    if (ret = 0)
+        file_buffer[ret] = '0';  Ensure null termination
+    return ret;
+}
+
+static const struct file_operations procfsmod_fops = {
+    .owner = THIS_MODULE,
+    .read = procfsmod_show,
+    .write = procfsmod_write,
+};
+
+static int __init procfsmod_init(void)
+{
+    directory_entry_pointer = proc_mkdir(directory_name, NULL);
+    if (IS_ERR(directory_entry_pointer)) {
+        pr_alert(Error creating procfs directory %s. Error code %ldn,
+                 directory_name, PTR_ERR(directory_entry_pointer));
+        return -1;
+    }
+    file_entry_pointer = proc_create(file_name, 0666, directory_entry_pointer, &procfsmod_fops);
+    if (IS_ERR(file_entry_pointer)) {
+        pr_alert(Error creating procfs file %s. Error code %ldn,
+                 file_name, PTR_ERR(file_entry_pointer));
+        proc_remove(directory_entry_pointer);
+        return -1;
+    }
+
+    return 0;
+}
+
+static void __exit procfsmod_exit(void)
+{
+    if (file_entry_pointer)
+        proc_remove(file_entry_pointer);
+    if (directory_entry_pointer)
+        proc_remove(directory_entry_pointer);
+}
+
+module_init(procfsmod_init);
+module_exit(procfsmod_exit);
+
+MODULE_LICENSE(GPL);
