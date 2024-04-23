@@ -1,0 +1,134 @@
+#include<linux/module.h>
+#include<linux/kthread.h>
+#include<linux/wait.h>
+#include<linux/completion.h>
+#include<linux/kfifo.h>
+#include<linux/slab.h>
+#include<linux/mutex.h>
+#include <linux/atomic.h>
+
+enum thread_index {WAKING_THREAD, WRITER_THREAD, READER_THREAD};
+
+static struct thread_structure 
+{
+	struct task_struct *thread[3];
+} threads;
+
+static struct kfifo fifo_queue;
+
+static LIST_HEAD(head);
+
+static wait_queue_head_t wait_queue;
+static bool condition;
+// makro deklarujÄce i inicjalizujÄce zmiennÄ typu atomic_t
+static atomic64_t number = ATOMIC64_INIT(0);
+
+// makro deklarujÄce i inicjalizujÄce muteks
+static DEFINE_MUTEX(number_lock);
+
+static int tempValue;
+int returned_value;
+unsigned int returned_size;
+
+static int writer_thread(void *data) 
+{
+	DEFINE_WAIT(wait);
+	for(;;) {
+		atomic64_inc(&number);
+		tempValue = atomic64_read(&number);
+
+		// tworzenie nowego elementu w kolejce i przydzielanie wartoĹci rĂłwnej aktualnej wartoĹci bufora
+		returned_size = kfifo_in(&fifo_queue,&tempValue,sizeof(tempValue));
+		if(returned_size!=sizeof(tempValue))
+			pr_alert("Enqueue error\n");
+
+
+		kfifo_peek(&fifo_queue,&tempValue);
+		pr_info("[Producent] Zapisano do kolejki FIFO wartoĹÄ: %d\n", tempValue);
+
+		// odblokowanie muteksa
+		mutex_unlock(&number_lock);
+
+		add_wait_queue(&wait_queue,&wait);
+		while(!condition) {
+			prepare_to_wait(&wait_queue,&wait,TASK_INTERRUPTIBLE); 
+			if(kthread_should_stop()) 
+				return 0;
+			schedule();
+		}
+		condition=false;
+		finish_wait(&wait_queue,&wait); 
+	}
+}
+
+static int reader_thread(void *data) 
+{
+	DEFINE_WAIT(wait);
+	for(;;) {
+		// zablokowanie muteksa
+		mutex_lock(&number_lock);
+
+		// odczytanie i usuwanie bieĹźÄcego elementu kolejki FIFO
+		kfifo_out(&fifo_queue,&tempValue,sizeof(tempValue));
+		pr_info("[Konsument]: Odczytano z listy wartoĹÄ: %d\n", tempValue);
+		
+		if(kthread_should_stop())
+			return 0;
+		schedule();
+	}
+}
+
+static int waking_thread(void *data)
+{
+	for(;;) {
+		if(kthread_should_stop())
+			return 0;
+		set_current_state(TASK_INTERRUPTIBLE);
+		if(schedule_timeout(1*HZ))
+			printk(KERN_INFO "Signal received!\n");
+		condition=true;
+		wake_up(&wait_queue);
+	}
+
+}
+
+static int __init threads_init(void)
+{
+	// przydzielanie pamiÄci na kolejkÄ FIFO dla 5 elementĂłw
+	returned_value = kfifo_alloc(&fifo_queue,5*sizeof(tempValue),GFP_KERNEL);
+	if(returned_value) {
+		pr_alert("Error allocating kfifo!\n");
+		return -ENOMEM;
+	}
+
+	mutex_lock(&number_lock);
+
+	init_waitqueue_head(&wait_queue);
+	threads.thread[READER_THREAD] = kthread_run(reader_thread,NULL,"reader_thread");
+	threads.thread[WRITER_THREAD] = kthread_run(writer_thread,NULL,"writer_thread");
+	threads.thread[WAKING_THREAD] = kthread_run(waking_thread,NULL,"waking_thread");
+	return 0;
+}
+
+static void __exit threads_exit(void)
+{
+	int value;
+	
+	kthread_stop(threads.thread[READER_THREAD]);
+	kthread_stop(threads.thread[WAKING_THREAD]);
+	kthread_stop(threads.thread[WRITER_THREAD]);
+
+	printk(KERN_INFO "Usuwanie kolejki: \n");
+	while(!kfifo_is_empty(&fifo_queue)) {
+		returned_size = kfifo_out(&fifo_queue,&value,sizeof(value));
+		if(returned_size!=sizeof(value))
+			pr_alert("Dequeue error!\n");
+		pr_notice("UsuniÄto element o wartoĹci: %u\n",value);
+	}
+	kfifo_free(&fifo_queue);
+}
+
+module_init(threads_init);
+module_exit(threads_exit);
+
+MODULE_LICENSE("GPL");
