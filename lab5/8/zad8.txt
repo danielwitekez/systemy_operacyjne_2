@@ -1,0 +1,81 @@
+#include<linux/module.h>
+#include<linux/kthread.h>
+#include<linux/wait.h>
+#include<linux/completion.h>
+
+enum thread_index {WAKING_THREAD, WRITER_THREAD, READER_THREAD};
+
+static struct thread_structure
+{
+	struct task_struct *thread[3];
+} threads;
+
+static wait_queue_head_t wait_queue;
+static bool condition;
+static DECLARE_COMPLETION(number_completion);
+static int number = 1;
+
+static int writer_thread(void *data)
+{
+	DEFINE_WAIT(wait);
+	for(;;) {
+		wait_for_completion(&number_completion);
+		number++;
+		if(kthread_should_stop())
+			return 0;
+		schedule();
+	}
+}
+
+static int reader_thread(void *data)
+{
+	DEFINE_WAIT(wait);
+	for(;;) {
+		pr_info("[reader_thread] Number value: %d\n",number);
+		complete(&number_completion);
+		add_wait_queue(&wait_queue,&wait);
+		while(!condition) {
+			prepare_to_wait(&wait_queue,&wait,TASK_INTERRUPTIBLE);
+			if(kthread_should_stop())
+				return 0;
+			printk(KERN_INFO "[writer_thread]: awake\n");
+			schedule();
+		}
+		condition=false;
+		finish_wait(&wait_queue,&wait);
+	}
+}
+
+static int waking_thread(void *data)
+{
+	for(;;) {
+		if(kthread_should_stop())
+			return 0;
+		set_current_state(TASK_INTERRUPTIBLE);
+		if(schedule_timeout(1*HZ))
+			printk(KERN_INFO "Signal received!\n");
+		condition=true;
+		wake_up(&wait_queue);
+	}
+}
+
+static int __init threads_init(void)
+{
+	init_waitqueue_head(&wait_queue);
+	threads.thread[WRITER_THREAD] = kthread_run(writer_thread,NULL,"writer_thread");
+	threads.thread[READER_THREAD] = kthread_run(reader_thread,NULL,"reader_thread");
+	threads.thread[WAKING_THREAD] = kthread_run(waking_thread,NULL,"waking_thread");
+	return 0;
+}
+
+static void __exit threads_exit(void)
+{
+	kthread_stop(threads.thread[WRITER_THREAD]);
+	kthread_stop(threads.thread[WAKING_THREAD]);
+	kthread_stop(threads.thread[READER_THREAD]);
+}
+
+module_init(threads_init);
+module_exit(threads_exit);
+
+MODULE_LICENSE("GPL");
