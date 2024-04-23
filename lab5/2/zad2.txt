@@ -1,0 +1,121 @@
+#include<linux/module.h>
+#include<linux/kthread.h>
+#include<linux/wait.h>
+#include<linux/completion.h>
+#include<linux/list.h>
+#include<linux/slab.h>
+
+enum thread_index {WAKING_THREAD, WRITER_THREAD, READER_THREAD};
+
+static struct thread_structure 
+{
+	struct task_struct *thread[3];
+} threads;
+
+struct example_struct
+{
+	int value;
+	struct list_head list_element;
+};
+
+static LIST_HEAD(head);
+
+static wait_queue_head_t wait_queue;
+static bool condition;
+// makro deklarujÄce i inicjalizujÄce zmiennÄ sygnaĹowÄ
+static DECLARE_COMPLETION(number_completion);
+// bufor do przechowywania kolejnej wartoĹci dla producenta
+static int number;
+
+struct example_struct *element;
+struct list_head *entry;
+
+static int writer_thread(void *data) 
+{
+	DEFINE_WAIT(wait);
+	for(;;) {
+		number++;
+
+		// tworzenie nowego elementu w liĹcie i przydzielanie wartoĹci rĂłwnej aktualnej wartoĹci bufora
+		element = (struct example_struct *)kmalloc(sizeof(struct example_struct),GFP_KERNEL);
+		if(!IS_ERR(element)) {
+			element->value = number;
+			INIT_LIST_HEAD(&element->list_element);
+			list_add_tail(&element->list_element,&head);
+		}
+
+		pr_info("[Producent] Zapisano do listy wartoĹÄ: %d\n", element->value);
+
+		complete(&number_completion);
+		add_wait_queue(&wait_queue,&wait);
+		while(!condition) {
+			prepare_to_wait(&wait_queue,&wait,TASK_INTERRUPTIBLE); 
+			if(kthread_should_stop()) 
+				return 0;
+			schedule();
+		}
+		condition=false;
+		finish_wait(&wait_queue,&wait); 
+	}
+}
+
+static int reader_thread(void *data) 
+{
+	DEFINE_WAIT(wait);
+	for(;;) {
+		wait_for_completion(&number_completion);
+		pr_info("[Konsument]: Odczytano z listy wartoĹÄ: %d\n",element->value);
+		
+		// usuwanie bieĹźÄcego elementu listy
+		list_del_init(&element->list_element);
+		kfree(element);
+		
+		if(kthread_should_stop())
+			return 0;
+		schedule();
+	}
+}
+
+static int waking_thread(void *data)
+{
+	for(;;) {
+		if(kthread_should_stop())
+			return 0;
+		set_current_state(TASK_INTERRUPTIBLE);
+		if(schedule_timeout(1*HZ))
+			printk(KERN_INFO "Signal received!\n");
+		condition=true;
+		wake_up(&wait_queue);
+	}
+
+}
+
+static int __init threads_init(void)
+{
+	init_waitqueue_head(&wait_queue);
+	threads.thread[READER_THREAD] = kthread_run(reader_thread,NULL,"reader_thread");
+	threads.thread[WRITER_THREAD] = kthread_run(writer_thread,NULL,"writer_thread");
+	threads.thread[WAKING_THREAD] = kthread_run(waking_thread,NULL,"waking_thread");
+	return 0;
+}
+
+static void __exit threads_exit(void)
+{
+	struct example_struct *element, *next;
+	
+	kthread_stop(threads.thread[READER_THREAD]);
+	kthread_stop(threads.thread[WAKING_THREAD]);
+	kthread_stop(threads.thread[WRITER_THREAD]);
+
+	printk(KERN_INFO "Usuwanie listy: \n");
+	list_for_each_entry_safe(element, next, &head, list_element) {
+		list_del(&element->list_element);
+		pr_notice("UsuniÄto element o wartoĹci: %d\n",element->value);
+		kfree(element);
+	}
+}
+
+module_init(threads_init);
+module_exit(threads_exit);
+
+MODULE_LICENSE("GPL");
