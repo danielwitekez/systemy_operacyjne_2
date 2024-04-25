@@ -1,0 +1,49 @@
+#include<linux/module.h>
+#include<linux/workqueue.h>
+
+static struct workqueue_struct *queue;
+
+static void normal_work_handler(struct work_struct *work)
+{
+	pr_info("Hi! I'm handler of normal work!\n");
+}
+
+static void delayed_work_handler(struct work_struct *work)
+{
+	pr_info("Hi! I'm handler of delayed work!\n");
+}
+
+static DECLARE_WORK(normal_work, normal_work_handler);
+static DECLARE_DELAYED_WORK(delayed_work, delayed_work_handler);
+
+static int __init workqueue_module_init(void)
+{
+	queue = create_singlethread_workqueue("works");
+	if(IS_ERR(queue)) {
+		pr_alert("[workqueue_module] Error creating a workqueue: %ld\n",PTR_ERR(queue));
+	return -ENOMEM;
+	}
+
+	if(!queue_work(queue,&normal_work))
+		pr_info("The normal work was already queued!\n");
+	if(!queue_delayed_work(queue,&delayed_work,10*HZ))
+		pr_info("The delayed work was already queued!\n");
+
+	return 0;
+}
+
+static void __exit workqueue_module_exit(void)
+{
+	if(!IS_ERR(queue)) {
+		if(cancel_work_sync(&normal_work))
+			pr_info("The normal work has not been done yet!\n");
+		if(cancel_delayed_work_sync(&delayed_work))
+			pr_info("The delayed work has not been done yet!\n");
+		destroy_workqueue(queue);
+	}
+}
+
+module_init(workqueue_module_init);
+module_exit(workqueue_module_exit);
+// zamiast XD wpisaÄ cokolwiek
+MODULE_LICENSE("XD");

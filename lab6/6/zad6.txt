@@ -1,0 +1,246 @@
+#include <linux/module.h>
+#include <linux/interrupt.h>
+#include <linux/delay.h>
+#include<linux/slab.h>
+#include<linux/string.h>
+#include<asm/uaccess.h>
+#include<linux/proc_fs.h>
+#include<linux/seq_file.h>
+
+static struct proc_dir_entry *directory_entry_pointer, *file_entry_pointer;
+static char *directory_name = "tasklety", *file_name = "stats";
+static char file_buffer[PAGE_SIZE];
+
+static int procfsmod_show(struct seq_file *seq, void *data)
+{
+	char *notice = (char *)data;
+	seq_putc(seq,*notice);
+	return 0;
+}
+
+static void *procfsmod_seq_start(struct seq_file *s, loff_t *position)
+{
+	loff_t buffer_index = *position;
+	return (buffer_index<PAGE_SIZE && file_buffer[buffer_index]!='\0')?(void *)&file_buffer[buffer_index]:NULL;
+}
+
+static void *procfsmod_seq_next(struct seq_file *s, void *data, loff_t *position)
+{
+	loff_t next_element_index = ++*position;
+	return (next_element_index<PAGE_SIZE && file_buffer[next_element_index]!='\0')?(void *)&file_buffer[next_element_index]:NULL; 
+}
+
+static void procfsmod_seq_stop(struct seq_file *s, void *data)
+{
+}
+
+static struct seq_operations procfsmod_seq_operations = {
+	.start = procfsmod_seq_start,
+	.next = procfsmod_seq_next,
+	.stop = procfsmod_seq_stop,
+	.show = procfsmod_show
+};
+
+static int procfsmod_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &procfsmod_seq_operations);
+}
+
+static ssize_t procfsmod_wirte(struct file *file, const char __user *buffer, size_t count, loff_t *position)
+{
+	int length = count;
+	if(count>PAGE_SIZE)
+		length=PAGE_SIZE-1;
+	if(copy_from_user(file_buffer,buffer,length))
+		return -EFAULT;
+	file_buffer[length]='\0';
+	return length;
+}
+
+static struct file_operations procfsmod_fops = {
+	.owner = THIS_MODULE,
+	.open = procfsmod_open,
+	.read = seq_read,
+	.write = procfsmod_wirte,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+
+static struct example_struct {
+	unsigned int numer_taskletu;
+	char priorytet[10];
+	char status[10]; 
+} *example_struct_pointer1, *example_struct_pointer2, *example_struct_pointer3, *example_struct_pointer4;
+
+static struct kmem_cache *tasklety_stats;
+
+static char status_utworzony[] = "utworzony";
+static char status_zaszeregowany[] = "zaszeregowany";
+static char status_wykonany[] = "wykonany";
+static char status_oczekujacy[] = "oczekujacy";
+
+static char priorytet_zwykly[] = "zwykly";
+static char priorytet_wysoki[] = "wysoki";
+
+
+static void example_constructor(void *argument)
+{
+	struct example_struct *example = (struct example_struct *)argument;
+	strcpy(example->priorytet,priorytet_wysoki);
+}
+
+void print_example_struct(struct example_struct *example)
+{
+	char temp[2];
+	sprintf(temp, "%d", example->numer_taskletu);
+
+	strcat(file_buffer, "Tasklet numer: ");
+	strcat(file_buffer, temp);
+	strcat(file_buffer, ", o priorytecie: ");
+	strcat(file_buffer, example->priorytet);
+	strcat(file_buffer, ", status: ");
+	strcat(file_buffer, example->status);
+	strcat(file_buffer, "\n");
+}
+
+static void tasklet_handler(unsigned long int data) {
+	
+	pr_info("Jestem taskletem nr %lu\n", data);
+
+	return;	
+}
+
+static void tasklet_handler_4(unsigned long int data);
+
+static DECLARE_TASKLET_DISABLED(task_1, tasklet_handler, 1);
+static DECLARE_TASKLET_DISABLED(task_2, tasklet_handler, 2);
+
+static DECLARE_TASKLET(task_3, tasklet_handler, 3);
+static DECLARE_TASKLET(task_4, tasklet_handler_4, 4);
+
+static void tasklet_handler_4(unsigned long int data) {
+	
+	pr_info("Jestem taskletem nr %lu\n", data);
+
+	tasklet_disable_nosync(&task_4);
+	
+	return;	
+}
+
+static int __init tasklets_init(void) {
+	
+	printk(KERN_INFO "Start\n");
+
+	tasklety_stats = kmem_cache_create("Tasklety", sizeof(struct example_struct),0, SLAB_HWCACHE_ALIGN|SLAB_POISON|SLAB_RED_ZONE, example_constructor);
+	if(IS_ERR(tasklety_stats)) {
+		pr_alert("Error creating cache: %ld\n",PTR_ERR(tasklety_stats));
+		return -ENOMEM;
+	}
+
+	example_struct_pointer1 = (struct example_struct *)
+        kmem_cache_alloc(tasklety_stats,GFP_KERNEL);
+    example_struct_pointer1->numer_taskletu = 1;
+    strcpy(example_struct_pointer1->status,status_utworzony);
+    strcpy(example_struct_pointer1->priorytet,priorytet_zwykly);
+	
+	example_struct_pointer2 = (struct example_struct *)
+        kmem_cache_alloc(tasklety_stats,GFP_KERNEL);
+    example_struct_pointer2->numer_taskletu = 2;
+    strcpy(example_struct_pointer2->status,status_utworzony);
+    strcpy(example_struct_pointer2->priorytet,priorytet_zwykly);
+	
+	example_struct_pointer3 = (struct example_struct *)
+        kmem_cache_alloc(tasklety_stats,GFP_KERNEL);
+    example_struct_pointer3->numer_taskletu = 3;
+    strcpy(example_struct_pointer3->status,status_utworzony);
+    strcpy(example_struct_pointer3->priorytet,priorytet_zwykly);
+	
+	example_struct_pointer4 = (struct example_struct *)
+        kmem_cache_alloc(tasklety_stats,GFP_KERNEL);
+    example_struct_pointer4->numer_taskletu = 4;
+    strcpy(example_struct_pointer4->status,status_utworzony);
+    strcpy(example_struct_pointer4->priorytet,priorytet_zwykly);
+
+	// tasklet 3 zostaje wyĹÄczony i zaszeregowany
+	tasklet_disable(&task_3);
+	tasklet_schedule(&task_3);
+
+    strcpy(example_struct_pointer3->status,status_zaszeregowany); 
+
+	// zaszeregowane zostajÄ wyĹÄczone tasklety 2 i 1
+	tasklet_schedule(&task_2);
+	tasklet_schedule(&task_1);
+
+    strcpy(example_struct_pointer2->status,status_zaszeregowany); 
+    strcpy(example_struct_pointer1->status,status_zaszeregowany); 
+
+	// tasklety wykonajÄ siÄ nie w kolejnoĹci wĹÄczenia, a w kolejnoĹci w jakiej zostaĹy zaszeregowane
+	tasklet_enable(&task_1);	
+	tasklet_enable(&task_2);
+	tasklet_enable(&task_3);
+
+    strcpy(example_struct_pointer1->status,status_wykonany); 
+    strcpy(example_struct_pointer2->status,status_wykonany); 
+    strcpy(example_struct_pointer3->status,status_wykonany); 
+
+	// wykona siÄ tylko raz, bo w pierwszym wywoĹaniu zostanie wyĹÄczony
+	tasklet_schedule(&task_4);
+	tasklet_schedule(&task_4);
+
+    strcpy(example_struct_pointer4->status,status_oczekujacy); 
+
+	print_example_struct(example_struct_pointer1);
+	print_example_struct(example_struct_pointer2);
+	print_example_struct(example_struct_pointer3);
+	print_example_struct(example_struct_pointer4);
+
+	directory_entry_pointer = proc_mkdir(directory_name, NULL);
+	if(IS_ERR(directory_entry_pointer)) {
+		pr_alert("Error creating procfs directory: %s. Error code: %ld\n",directory_name,PTR_ERR(directory_entry_pointer));
+		return -1;
+	}
+	file_entry_pointer = proc_create_data(file_name,0666,directory_entry_pointer,&procfsmod_fops,(void *)file_buffer);
+	if(IS_ERR(file_entry_pointer)) {
+		pr_alert("Error creating procfs file: %s. Error code: %ld\n",file_name,PTR_ERR(file_entry_pointer));
+		proc_remove(directory_entry_pointer);
+		return -1;
+	}
+    
+	return 0;
+}
+
+static void __exit tasklets_exit(void) {
+	
+	tasklet_kill(&task_1);
+	tasklet_kill(&task_2);
+	tasklet_kill(&task_3);
+	tasklet_kill(&task_4);
+
+	if(tasklety_stats) {
+        if(example_struct_pointer1) {
+            kmem_cache_free(tasklety_stats,example_struct_pointer1);
+        }
+        if(example_struct_pointer2) {
+            kmem_cache_free(tasklety_stats,example_struct_pointer2);
+        }
+        if(example_struct_pointer3) {
+            kmem_cache_free(tasklety_stats,example_struct_pointer3);
+        }
+        if(example_struct_pointer4) {
+            kmem_cache_free(tasklety_stats,example_struct_pointer4);
+        }
+        kmem_cache_destroy(tasklety_stats);
+    }
+
+	if(file_entry_pointer)
+		proc_remove(file_entry_pointer);
+	if(directory_entry_pointer)
+		proc_remove(directory_entry_pointer);
+
+	printk(KERN_INFO "Koniec\n");
+}
+
+module_init(tasklets_init);
+module_exit(tasklets_exit);
+
+MODULE_LICENSE("GPL");

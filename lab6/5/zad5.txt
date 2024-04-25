@@ -1,0 +1,58 @@
+#include <linux/module.h>
+#include <linux/workqueue.h>
+
+static int i = 0;
+static int maxIterations = 5;
+static void auto_delayed_handler(struct work_struct *);
+static struct workqueue_struct *queue;
+
+DECLARE_DELAYED_WORK(auto_delayed_work, auto_delayed_handler);
+
+static int __init tasklets_init(void) {
+
+	printk(KERN_INFO "RozpoczÄcie dziaĹania\n");
+	queue = create_singlethread_workqueue("kolejka1");
+	
+	if (IS_ERR(queue)) {
+		pr_alert("Error creating a workqueue: %ld\n", PTR_ERR(queue));
+		return -ENOMEM;
+	}
+	// opĂłĹşnienie wynosi 2 sekundy
+	if (!queue_delayed_work(queue, &auto_delayed_work, 2*HZ)) {
+		pr_info("The delayed work was already queued!\n");
+	}
+
+	return 0;
+}
+
+static void auto_delayed_handler(struct work_struct *work) {
+	
+	i++;
+	pr_info("Jestem wÄtkiem samoszeregujÄcym siÄ. SzeregujÄ siÄ po raz: %d\n", i);
+	
+	if (i < maxIterations) {
+		if (!queue_delayed_work(queue, &auto_delayed_work, 2*HZ)) {
+			pr_info("The delayed work was already queued!\n");
+		}	
+	}
+
+	return;	
+}
+
+static void __exit tasklets_exit(void) {
+	
+	if(!IS_ERR(queue)) {
+		if(cancel_delayed_work_sync(&auto_delayed_work)) {
+			pr_info("The normal work has not been done yet!\n");
+		}
+		
+		destroy_workqueue(queue);
+	}
+	
+	printk(KERN_INFO "ZakoĹczenie dziaĹania\n");
+}
+
+module_init(tasklets_init);
+module_exit(tasklets_exit);
+
+MODULE_LICENSE("GPL");

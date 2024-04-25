@@ -1,0 +1,34 @@
+#include <linux/module.h>
+#include <linux/interrupt.h>
+
+int i = 0;
+int maxIterations = 10;
+
+static void auto_tasklet_handler(unsigned long int data);
+
+static DECLARE_TASKLET(auto_tasklet, auto_tasklet_handler, 1);
+
+static void auto_tasklet_handler(unsigned long int data) {
+	i++;
+	pr_info("Jestem taskletem samoszeregujÄcym sie. Moje ID: %lu. Szereguje siÄ po raz %d", data, i);
+	
+	if (i < maxIterations) {
+		tasklet_schedule(&auto_tasklet);
+	}
+}
+
+static int __init tasklets_init(void) {
+	printk(KERN_INFO "RozpoczÄcie dziaĹania\n");
+	tasklet_schedule(&auto_tasklet);
+	return 0;
+}
+
+static void __exit tasklets_exit(void) {
+	tasklet_kill(&auto_tasklet);
+	printk(KERN_INFO "ZakoĹczenie dziaĹania\n");
+}
+
+module_init(tasklets_init);
+module_exit(tasklets_exit);
+
+MODULE_LICENSE("GPL");

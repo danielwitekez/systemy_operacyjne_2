@@ -1,0 +1,67 @@
+#include <linux/module.h>
+#include <linux/interrupt.h>
+#include <linux/delay.h>
+
+static void tasklet_handler(unsigned long int data) {
+	
+	pr_info("Jestem taskletem nr %lu\n", data);
+
+	return;	
+}
+
+static void tasklet_handler_4(unsigned long int data);
+
+static DECLARE_TASKLET_DISABLED(task_1, tasklet_handler, 1);
+static DECLARE_TASKLET_DISABLED(task_2, tasklet_handler, 2);
+
+static DECLARE_TASKLET(task_3, tasklet_handler, 3);
+static DECLARE_TASKLET(task_4, tasklet_handler_4, 4);
+
+static void tasklet_handler_4(unsigned long int data) {
+	
+	pr_info("Jestem taskletem nr %lu\n", data);
+
+	tasklet_disable_nosync(&task_4);
+	
+	return;	
+}
+
+
+static int __init tasklets_init(void) {
+	
+	printk(KERN_INFO "Start\n");
+
+	// tasklet 3 zostaje wyĹÄczony i zaszeregowany
+	tasklet_disable(&task_3);
+	tasklet_schedule(&task_3);
+
+	// zaszeregowane zostajÄ wyĹÄczone tasklety 2 i 1
+	tasklet_schedule(&task_2);
+	tasklet_schedule(&task_1);
+	
+	// tasklety wykonajÄ siÄ nie w kolejnoĹci wĹÄczenia, a w kolejnoĹci w jakiej zostaĹy zaszeregowane
+	tasklet_enable(&task_1);	
+	tasklet_enable(&task_2);
+	tasklet_enable(&task_3);
+
+	// wykona siÄ tylko raz, bo w pierwszym wywoĹaniu zostanie wyĹÄczony
+	tasklet_schedule(&task_4);
+	tasklet_schedule(&task_4);
+
+	return 0;
+}
+
+static void __exit tasklets_exit(void) {
+	
+	tasklet_kill(&task_1);
+	tasklet_kill(&task_2);
+	tasklet_kill(&task_3);
+	tasklet_kill(&task_4);
+
+	printk(KERN_INFO "Koniec\n");
+}
+
+module_init(tasklets_init);
+module_exit(tasklets_exit);
+
+MODULE_LICENSE("GPL");

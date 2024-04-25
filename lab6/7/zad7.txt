@@ -1,0 +1,41 @@
+#include<linux/module.h>
+#include<linux/workqueue.h>
+
+static void normal_work_handler(struct work_struct *work) 
+{
+	pr_info("Hi! I'm handler of normal work!\n");
+}
+
+static void delayed_work_handler(struct work_struct *work) 
+{
+	pr_info("Hi! I'm handler of delayed work!\n");
+}
+
+static DECLARE_WORK(normal_work, normal_work_handler);
+static DECLARE_DELAYED_WORK(delayed_work, delayed_work_handler);
+
+static int __init workqueue_module_init(void) 
+{
+	printk(KERN_INFO "RozpoczÄcie dziaĹania\n");
+	
+	if(!schedule_work(&normal_work))
+		pr_info("The normal work was already queued!\n");
+	// wykona siÄ po 10 sekundach
+	if(!schedule_delayed_work(&delayed_work,10*HZ))
+		pr_info("The delayed work was already queued!\n");
+
+	return 0; 
+}
+
+static void __exit workqueue_module_exit(void) 
+{
+	// bez anulowania opĂłĹşnionej pracy, jeĹli nie zostaĹa jeszcze wykonana to kernel siÄ wysypie przy oprĂłĹźnianiu kolejki
+	cancel_delayed_work(&delayed_work);
+	flush_scheduled_work();
+	
+	printk(KERN_INFO "ZakoĹczenie dziaĹania\n");
+}
+
+module_init(workqueue_module_init);
+module_exit(workqueue_module_exit);
+MODULE_LICENSE("GPL");
